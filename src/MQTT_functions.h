@@ -14,6 +14,20 @@ void mqttCallback(char *topic, byte *payload, unsigned int len);
 boolean mqttConnect();
 
 //extern int ledStatus;
+enum MqttTopic {
+    TOPIC_LED,
+    TOPIC_OTHER,  // Replace with actual topic names
+    TOPIC_UNKNOWN
+};
+
+MqttTopic getTopicType(const char* topic) {
+    if (String(topic) == topicLed) {
+        return TOPIC_LED;
+    }
+    // Add other topic comparisons
+    // if (String(topic) == "your/other/topic") return TOPIC_OTHER;
+    return TOPIC_UNKNOWN;
+}
 
 //MQTT
 void mqttCallback(char *topic, byte *payload, unsigned int len)
@@ -25,12 +39,24 @@ void mqttCallback(char *topic, byte *payload, unsigned int len)
     Serial.println();
 
     // Only proceed if incoming message's topic matches
-    if (String(topic) == topicLed) {
-        ledStatus = !ledStatus;
-        digitalWrite(LED_PIN, ledStatus);
-        Serial.print("ledStatus:");
-        Serial.println(ledStatus);
-        mqtt.publish(topicLedStatus, ledStatus ? "1" : "0", true);
+    MqttTopic topicType = getTopicType(topic);
+    switch (topicType) {
+        case TOPIC_LED:
+            ledStatus = !ledStatus;
+            digitalWrite(LED_PIN, ledStatus);
+            Serial.print("ledStatus:");
+            Serial.println(ledStatus);
+            mqtt.publish(topicLedStatus, ledStatus ? "1" : "0", true);
+            break;
+        case TOPIC_OTHER:
+            // Handle other topic
+            break;
+
+        // Add other cases as needed
+        case TOPIC_UNKNOWN:
+        default:
+            Serial.println("Unknown topic");
+            break;
     }
 }
 

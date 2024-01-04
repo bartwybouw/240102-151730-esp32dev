@@ -9,6 +9,13 @@
 * Bart Wybouw 29/12/2023 with the support of ChatGPT 4.0
 *
 **************************************************************/
+// Define DEBUG mode with extra output to serial monitor
+#ifdef DEBUG
+#define DEBUG_PRINT(x)  Serial.println(x) // Development mode
+#else
+#define DEBUG_PRINT(x) // Production mode
+#endif
+
 #define CURRENTFILEANDVERSION MqttClient_Cellular_v1_2
 #define TINY_GSM_MODEM_SIM7070 // Define modem type
 #define SerialMon Serial // Set serial for debug console (to the Serial Monitor, default speed 115200)
@@ -84,6 +91,12 @@ void setup()
     Serial.begin(115200);
     delay(10);
 
+    // Clear Blue LED
+    pinMode(LED_PIN, OUTPUT);
+    digitalWrite(LED_PIN, HIGH);
+    // Set LED ON = Insert SD-card !!!
+    digitalWrite(LED_PIN, LOW);
+
     // Set LED OFF
     pinMode(LED_PIN, OUTPUT);
     digitalWrite(LED_PIN, HIGH);
@@ -91,8 +104,11 @@ void setup()
     pinMode(PWR_PIN, OUTPUT);
     digitalWrite(PWR_PIN, HIGH);
     // Starting the machine requires at least 1 second of low level, and with a level conversion, the levels are opposite
-    delay(1000);
+    delay(5000);
     digitalWrite(PWR_PIN, LOW);
+
+    // Set LED OFF = No longer insert SC-card
+    digitalWrite(LED_PIN, HIGH);
 
     // Prepare SD-card
     SPI.begin(SD_SCLK, SD_MISO, SD_MOSI, SD_CS);
@@ -114,17 +130,15 @@ void setup()
     // Restart takes quite some time
     // To skip it, call init() instead of restart()
     Serial.println("Initializing modem...");
-    if (!modem.restart()) {
+    if (!modem.init()) {
         logAndPublish("log","Failed to restart modem, attempting to continue without restarting", LOG_INFO);
     } else {
         logAndPublish("log","Modem started", LOG_INFO);
     }
 
-    String name = modem.getModemName();
-    DBG("Modem Name:", name);
-    String modemInfo = modem.getModemInfo();
-    DBG("Modem Info:", modemInfo);
-
+    String modemName = modem.getModemName();
+    logAndPublish("modem",modemName, LOG_INFO);
+    
 #if TINY_GSM_USE_GPRS
     // Unlock your SIM card with a PIN if needed
     if (GSM_PIN && modem.getSimStatus() != 3) {
@@ -197,6 +211,8 @@ void loop()
     struct tm timeinfo;
     time(&now);
     localtime_r(&now, &timeinfo);
+
+    logAndPublish("time", asctime(&timeinfo) ,LOG_INFO);
     logAndPublish("status", "Waking up",LOG_INFO);
 
     // Make sure we're still registered on the network
