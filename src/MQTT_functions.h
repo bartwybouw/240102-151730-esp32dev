@@ -30,7 +30,7 @@ void mqttCallback(char *topic, byte *payload, unsigned int len)
         digitalWrite(LED_PIN, ledStatus);
         Serial.print("ledStatus:");
         Serial.println(ledStatus);
-        mqtt.publish(topicLedStatus, ledStatus ? "1" : "0");
+        mqtt.publish(topicLedStatus, ledStatus ? "1" : "0", true);
     }
 }
 
@@ -49,7 +49,7 @@ boolean mqttConnect()
         return false;
     }
     Serial.println(" success");
-    mqtt.publish(topicInit, "GsmClientTest started");
+    mqtt.publish(baseTopic.c_str(), "GsmClientTest started", true);
     mqtt.subscribe(topicLed);
     return mqtt.connected();
 }
