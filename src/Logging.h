@@ -26,10 +26,10 @@ String logLevelToString(logLevel level);
 void logAndPublish(String topic, String payload, logLevel level) {
     time(&now);
     localtime_r(&now, &timeinfo);
-    SerialMon.println(String(topic + payload));
+    SerialMon.println(String(topic + ": " + payload));
     writeToSDCard(asctime(&timeinfo) + topic + ": " + payload);
-    String mqttTopic = baseTopic + "/log/"+ topic;
-    mqtt.publish(topic.c_str(), payload.c_str());
+    String mqttTopic = baseTopic + "/" + topic;
+    mqtt.publish(mqttTopic.c_str(), payload.c_str());
     
     logLevelToString(level);
 }

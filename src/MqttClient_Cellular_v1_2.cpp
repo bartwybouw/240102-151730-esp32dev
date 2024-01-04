@@ -12,7 +12,6 @@
 #define CURRENTFILEANDVERSION MqttClient_Cellular_v1_2
 #define TINY_GSM_MODEM_SIM7070 // Define modem type
 #define SerialMon Serial // Set serial for debug console (to the Serial Monitor, default speed 115200)
-
 #define SerialAT Serial1 // Set serial for AT commands (to the module), use Hardware Serial on Mega, Leonardo, Micro
 #define TINY_GSM_DEBUG SerialMon // Define the serial console for debug prints, if needed
 
@@ -30,7 +29,7 @@
 Ticker tick;
 
 #define uS_TO_S_FACTOR 1000000ULL  // Conversion factor for micro seconds to seconds
-#define TIME_TO_SLEEP  10          // Time ESP32 will go to sleep (in seconds)
+#define TIME_TO_SLEEP  60          // Time ESP32 will go to sleep (in seconds)
 #define LED_PIN 12                 // Blue LED on the ESP32 module, used to indicate GPS lock 
 
 // Some global definitions
@@ -62,31 +61,6 @@ PubSubClient  mqtt(client);
 #include "MQTT_functions.h" // All MQTT ...
 #include "SDcard_functions.h" // All SDcard, storage and storage management ...
 #include "Logging.h" // Functions to do logging, translate debug levels and save and transmit log info
-
-// Just in case someone defined the wrong thing..
-#if TINY_GSM_USE_GPRS && not defined TINY_GSM_MODEM_HAS_GPRS
-    #undef TINY_GSM_USE_GPRS
-    #undef TINY_GSM_USE_WIFI
-    #define TINY_GSM_USE_GPRS false
-    #define TINY_GSM_USE_WIFI true
-#endif
-#if TINY_GSM_USE_WIFI && not defined TINY_GSM_MODEM_HAS_WIFI
-    #undef TINY_GSM_USE_GPRS
-    #undef TINY_GSM_USE_WIFI
-    #define TINY_GSM_USE_GPRS true
-    #define TINY_GSM_USE_WIFI false
-#endif
-
-// *** Function declarations *** //
-void logAndPublish(String topic, String payload);
-float readBatteryVoltage();
-
-// Log function
-void logAndPublish(String topic, String payload) {
-    Serial.println(String("Log : ") + topic + payload);
-    mqtt.publish(topic.c_str(), payload.c_str());
-    writeToSDCard(topic + ": " + payload);
-}
 
 // Battery Calculation
 float readBatteryVoltage() {
@@ -123,18 +97,15 @@ void setup()
     // Prepare SD-card
     SPI.begin(SD_SCLK, SD_MISO, SD_MOSI, SD_CS);
     if (!SD.begin(SD_CS, SPI)) {
-        Serial.println("SDCard MOUNT FAIL");
+        logAndPublish("SDcard","MOUNT FAIL",LOG_INFO);
     } else {
         uint32_t cardSize = SD.cardSize() / (1024 * 1024);
-        String str = "SDCard Size: " + String(cardSize) + "MB";
-        Serial.println(str);
+        logAndPublish("SDcard", String(cardSize) + "MB" ,LOG_INFO);
     }
-    writeToSDCard("Log Opened");
-    // writeToSDCard(CURRENTFILEANDVERSION);
     float BatteryVoltage=readBatteryVoltage();
-    writeToSDCard(String(BatteryVoltage).c_str());
+    logAndPublish("currentBatteryVoltage",String(BatteryVoltage).c_str(),LOG_INFO);
     // Waiting for modem initialisation
-    Serial.println("\nWait...");
+    logAndPublish("log", "Wait..." ,LOG_INFO);
     delay(1000);
 
     // Set-up modem serial communication
@@ -144,14 +115,13 @@ void setup()
     // To skip it, call init() instead of restart()
     Serial.println("Initializing modem...");
     if (!modem.restart()) {
-        Serial.println("Failed to restart modem, attempting to continue without restarting");
+        logAndPublish("log","Failed to restart modem, attempting to continue without restarting", LOG_INFO);
     } else {
-        SerialMon.println("Modem started");      
+        logAndPublish("log","Modem started", LOG_INFO);
     }
 
     String name = modem.getModemName();
     DBG("Modem Name:", name);
-
     String modemInfo = modem.getModemInfo();
     DBG("Modem Info:", modemInfo);
 
@@ -173,11 +143,6 @@ void setup()
     SerialMon.println(" success");
 #endif
 
-#if TINY_GSM_USE_GPRS && defined TINY_GSM_MODEM_XBEE
-    // The XBee must run the gprsConnect function BEFORE waiting for network!
-    modem.gprsConnect(apn, gprsUser, gprsPass);
-#endif
-
     SerialMon.print("Waiting for network...");
     if (!modem.waitForNetwork()) {
         SerialMon.println(" fail");
@@ -185,7 +150,6 @@ void setup()
         return;
     }
     SerialMon.println(" success");
-
     if (modem.isNetworkConnected()) {
         SerialMon.println("Network connected");
     }
@@ -222,8 +186,7 @@ void setup()
     struct tm timeinfo;
     gmtime_r(&now, &timeinfo);
     logAndPublish(baseTopic + "/localTime", asctime(&timeinfo)); */
-    logAndPublish("CurrentFileVersion", "MqttClient_Cellular_v1_2");
-
+    logAndPublish("CurrentFileVersion", "MqttClient_Cellular_v1_2",LOG_INFO);
 }
 
 //****** LOOP ******//
@@ -234,15 +197,15 @@ void loop()
     struct tm timeinfo;
     time(&now);
     localtime_r(&now, &timeinfo);
-    logAndPublish("CurrentFileVersion", "MqttClient_Cellular_v1_2");
-    logAndPublish(baseTopic+"/status", "Waking up");
+    logAndPublish("status", "Waking up",LOG_INFO);
 
     // Make sure we're still registered on the network
     if (!modem.isNetworkConnected()) {
         SerialMon.println("Network disconnected");
-        if (!modem.waitForNetwork(180000L, true)) {
+        if (!modem.waitForNetwork(60000L, true)) {
             SerialMon.println(" fail");
             delay(10000);
+            ESP.restart();
             return;
         }
         if (modem.isNetworkConnected()) {
@@ -280,11 +243,11 @@ void loop()
         return;
     }
     float currentBatteryVoltage = readBatteryVoltage();
-    logAndPublish("TTGO-T-SIM-7070G_1/currentBatteryVoltage", String(currentBatteryVoltage));
-    //SerialMon.println("=== MQTT IS CONNECTED ===");
+    logAndPublish("currentBatteryVoltage", String(currentBatteryVoltage),LOG_INFO);
+    SerialMon.println("=== MQTT IS CONNECTED ===");
     mqtt.loop();
-    logAndPublish("TTGO-T-SIM-7070G_1/status", "Going to sleep");
-    delay(1000);
-    esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP*1000); // Sleep for TIME_TO_SLEEP time
+    logAndPublish("status", "Going to sleep",LOG_INFO);
+    delay(5000);
+    esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP*1000000); // Sleep for TIME_TO_SLEEP time in microseconds
     esp_deep_sleep_start();
 }

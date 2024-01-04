@@ -36,7 +36,7 @@ void writeToSDCard(String data) {
     //if (digitalRead(LOG_SWITCH_PIN) == LOW) {
         File file = SD.open("/log.txt", FILE_APPEND);
         if (file) {
-            Serial.println("Writing log.txt : " + data );
+            //Serial.println("Writing log.txt : " + data );
             file.println(data);
             file.close();
         } else {

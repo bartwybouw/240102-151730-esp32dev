@@ -20,7 +20,7 @@ const char wifiPass[] = "blijfuitonsnetwerk";
 // MQTT details
 const char* mqttBroker     = "178.116.210.112";
 const int   mqttPort       = 18883;
-const char* mqttClientName = "TTGO-T-SIM7070G_1";
+const char* mqttClientName = "TTGO-T-SIM7070G_2";
 const char* mqttUser       = "bartw";
 const char* mqttPassword   = "blijfteruit";
 

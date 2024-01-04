@@ -18,26 +18,26 @@ boolean mqttConnect();
 //MQTT
 void mqttCallback(char *topic, byte *payload, unsigned int len)
 {
-    SerialMon.print("Message arrived [");
-    SerialMon.print(topic);
-    SerialMon.print("]: ");
-    SerialMon.write(payload, len);
-    SerialMon.println();
+    Serial.print("Message arrived [");
+    Serial.print(topic);
+    Serial.print("]: ");
+    Serial.write(payload, len);
+    Serial.println();
 
     // Only proceed if incoming message's topic matches
     if (String(topic) == topicLed) {
         ledStatus = !ledStatus;
         digitalWrite(LED_PIN, ledStatus);
-        SerialMon.print("ledStatus:");
-        SerialMon.println(ledStatus);
+        Serial.print("ledStatus:");
+        Serial.println(ledStatus);
         mqtt.publish(topicLedStatus, ledStatus ? "1" : "0");
     }
 }
 
 boolean mqttConnect()
 {
-    SerialMon.print("Connecting to ");
-    SerialMon.print(mqttBroker);
+    Serial.print("Connecting to ");
+    Serial.print(mqttBroker);
     // Connect to MQTT Broker
     //boolean status = mqtt.connect("GsmClientTest");
 
@@ -45,10 +45,10 @@ boolean mqttConnect()
      boolean status = mqtt.connect(mqttClientName, mqttUser, mqttPassword);
 
     if (status == false) {
-        SerialMon.println(" fail");
+        Serial.println(" fail");
         return false;
     }
-    SerialMon.println(" success");
+    Serial.println(" success");
     mqtt.publish(topicInit, "GsmClientTest started");
     mqtt.subscribe(topicLed);
     return mqtt.connected();
