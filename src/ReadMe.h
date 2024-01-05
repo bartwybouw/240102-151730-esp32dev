@@ -24,4 +24,5 @@
 *  - amount of data being sent
 *  - how well does this scaling up/down of data work and the impact on cost
 * Bart Wybouw 29/12/2023 with the support of ChatGPT 4.0
+*
 */

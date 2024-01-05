@@ -14,18 +14,21 @@ void mqttCallback(char *topic, byte *payload, unsigned int len);
 boolean mqttConnect();
 
 //extern int ledStatus;
+
 enum MqttTopic {
     TOPIC_LED,
-    TOPIC_OTHER,  // Replace with actual topic names
+    TOPIC_DEVICENAME,  
     TOPIC_UNKNOWN
 };
 
+// Convert topics
 MqttTopic getTopicType(const char* topic) {
     if (String(topic) == topicLed) {
         return TOPIC_LED;
     }
-    // Add other topic comparisons
-    // if (String(topic) == "your/other/topic") return TOPIC_OTHER;
+    if (String(topic) == topicDeviceName) {
+        return TOPIC_DEVICENAME;
+    }
     return TOPIC_UNKNOWN;
 }
 
@@ -41,22 +44,38 @@ void mqttCallback(char *topic, byte *payload, unsigned int len)
     // Only proceed if incoming message's topic matches
     MqttTopic topicType = getTopicType(topic);
     switch (topicType) {
-        case TOPIC_LED:
+        case TOPIC_LED : {
             ledStatus = !ledStatus;
             digitalWrite(LED_PIN, ledStatus);
-            Serial.print("ledStatus:");
-            Serial.println(ledStatus);
+            logAndPublish("log", "Led status changed to " + String(ledStatus), LOG_INFO);
             mqtt.publish(topicLedStatus, ledStatus ? "1" : "0", true);
             break;
-        case TOPIC_OTHER:
-            // Handle other topic
-            break;
+            }   
+        case TOPIC_DEVICENAME :{
+            // Free the old memory if it was previously allocated
+            free(mqttClientName);
 
+            // Allocate new memory for the updated name (including null-terminator)
+            mqttClientName = (char*)malloc(len + 1);
+
+            if (mqttClientName != nullptr) {
+                // Copy the payload into the newly allocated memory
+                strncpy(mqttClientName, (char*)payload, len);
+                mqttClientName[len] = '\0'; // Null-terminate the string
+            } else {
+                // Handle memory allocation error
+                Serial.println("Error: Memory allocation failed for mqttClientName.");
+                break;
+            }
+
+            logAndPublish("log", "Device name changed to " + String(mqttClientName), LOG_INFO);
+            break;
+            }
         // Add other cases as needed
-        case TOPIC_UNKNOWN:
-        default:
+        case TOPIC_UNKNOWN : {
             Serial.println("Unknown topic");
             break;
+            }
     }
 }
 

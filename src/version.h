@@ -7,5 +7,12 @@
 
 
 #define PROJECT_VERSION_MAJOR 1
-#define PROJECT_VERSION_MINOR 2
+#define PROJECT_VERSION_MINOR 3
 #define PROJECT_VERSION_PATCH 0
+
+/* 1.3
+
+- Removed version from main filename
+- cleanup startup code for modem
+- keep system up for a bit longer and go through a couple of MQTT send loops
+-

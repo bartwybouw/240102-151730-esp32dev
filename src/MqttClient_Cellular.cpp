@@ -16,7 +16,6 @@
 #define DEBUG_PRINT(x) // Production mode
 #endif
 
-#define CURRENTFILEANDVERSION MqttClient_Cellular_v1_2
 #define TINY_GSM_MODEM_SIM7070 // Define modem type
 #define SerialMon Serial // Set serial for debug console (to the Serial Monitor, default speed 115200)
 #define SerialAT Serial1 // Set serial for AT commands (to the module), use Hardware Serial on Mega, Leonardo, Micro
@@ -33,18 +32,23 @@
 #include <SD.h>
 #include <esp_adc_cal.h>
 
+// Include own files
+#include "ReadMe.h" // Contains additional info on working of the sketch
+#include "credentials.h" // File with credentials
+
 Ticker tick;
 
 #define uS_TO_S_FACTOR 1000000ULL  // Conversion factor for micro seconds to seconds
 #define TIME_TO_SLEEP  60          // Time ESP32 will go to sleep (in seconds)
 #define LED_PIN 12                 // Blue LED on the ESP32 module, used to indicate GPS lock 
+#define KEEP_ALIVE_TIME 60         // Keep alive time for controller before going to deep sleep
 
 // Some global definitions
 int ledStatus = LOW;              // Indicates the status of the blue LED
 int vref = 1100;                  // For battery measurement
 float current_battery_voltage = 9.99; // For battery measurement
 uint32_t lastReconnectAttempt = 0;
-String baseTopic = "TTGO-T-SIM7070G_2"; // Needs to be configured during the onboarding
+String baseTopic; // Needs to be configured during the onboarding, default in credentials.h
 time_t now;
 struct tm timeinfo;
 
@@ -61,13 +65,11 @@ TinyGsmClient client(modem);
 PubSubClient  mqtt(client);
 
 // *** Include additional files
-#include "ReadMe.h" // Contains additional info on working of the sketch
-#include "credentials.h" // File with credentials
+#include "SDcard_functions.h" // All SDcard, storage and storage management ...
+#include "Logging.h" // Functions to do logging, translate debug levels and save and transmit log info
 #include "Modem_functions.h" // All modem related functions and definitions 
 #include "GPS_functions.h" // All GPS related functions and definitions
 #include "MQTT_functions.h" // All MQTT ...
-#include "SDcard_functions.h" // All SDcard, storage and storage management ...
-#include "Logging.h" // Functions to do logging, translate debug levels and save and transmit log info
 
 // Battery Calculation
 float readBatteryVoltage() {
@@ -183,10 +185,26 @@ void setup()
         SerialMon.println("GPRS connected");
     }
 #endif
+    
+    // Setup MQTT Client Name with default name that will be update during onbaording via MQTT message 
+    mqttClientName = (char*)malloc(strlen(mqttInitClientName) + 1); // +1 for null terminator
+    if (mqttClientName != nullptr) {
+        strcpy(mqttClientName, mqttInitClientName);
+    } else {
+        // Handle memory allocation error
+        Serial.println("Critical error: Memory allocation failed. Entering safe mode.");
+        while (true) {
+            delay(1000);
+            ESP.restart();
+        }
+    }
+    // Set the base topic for MQTT messages
+    baseTopic = String(mqttClientName);
 
     // MQTT Broker setup
     mqtt.setServer(mqttBroker, mqttPort);
     mqtt.setCallback(mqttCallback);
+    mqtt.publish(baseTopic.c_str(), mqttClientName, true);
 
     // Setup time   
     configTime(0, 0, "pool.ntp.org", "time.nist.gov");
@@ -214,7 +232,7 @@ void loop()
 
     logAndPublish("time", asctime(&timeinfo) ,LOG_INFO);
     logAndPublish("status", "Waking up",LOG_INFO);
-
+   
     // Make sure we're still registered on the network
     if (!modem.isNetworkConnected()) {
         SerialMon.println("Network disconnected");
