@@ -12,7 +12,8 @@
 
 /* 1.3
 
-- Removed version from main filename
++ Removed version from main filename
++ Start with an initial MQTTDeviceName and be able to update it once the device is online using MQTT
 - cleanup startup code for modem
 - keep system up for a bit longer and go through a couple of MQTT send loops
 -

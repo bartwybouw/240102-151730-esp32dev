@@ -91,6 +91,8 @@ void setup()
 {
     // Set console baud rate
     Serial.begin(115200);
+    Serial.println("Starting...");
+
     delay(10);
 
     // Clear Blue LED
@@ -279,9 +281,11 @@ void loop()
     float currentBatteryVoltage = readBatteryVoltage();
     logAndPublish("currentBatteryVoltage", String(currentBatteryVoltage),LOG_INFO);
     SerialMon.println("=== MQTT IS CONNECTED ===");
+    SerialMon.println(mqttClientName);
     mqtt.loop();
     logAndPublish("status", "Going to sleep",LOG_INFO);
-    delay(5000);
-    esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP*1000000); // Sleep for TIME_TO_SLEEP time in microseconds
-    esp_deep_sleep_start();
+    delay(10000);
+    //esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP*1000000); // Sleep for TIME_TO_SLEEP time in microseconds
+    //esp_deep_sleep_start();
+
 }
