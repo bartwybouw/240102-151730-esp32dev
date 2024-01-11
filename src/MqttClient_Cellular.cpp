@@ -189,9 +189,9 @@ void setup()
 #endif
     
     // Setup MQTT Client Name with default name that will be update during onbaording via MQTT message 
-    mqttClientName = (char*)malloc(strlen(mqttInitClientName) + 1); // +1 for null terminator
-    if (mqttClientName != nullptr) {
-        strcpy(mqttClientName, mqttInitClientName);
+    deviceName = (char*)malloc(strlen(InitDeviceName) + 1); // +1 for null terminator
+    if (deviceName != nullptr) {
+        strcpy(deviceName, InitDeviceName);
     } else {
         // Handle memory allocation error
         Serial.println("Critical error: Memory allocation failed. Entering safe mode.");
@@ -201,12 +201,12 @@ void setup()
         }
     }
     // Set the base topic for MQTT messages
-    baseTopic = String(mqttClientName);
+    baseTopic = String(deviceName);
 
     // MQTT Broker setup
     mqtt.setServer(mqttBroker, mqttPort);
     mqtt.setCallback(mqttCallback);
-    mqtt.publish(baseTopic.c_str(), mqttClientName, true);
+    mqtt.publish(baseTopic.c_str(), deviceName, true);
 
     // Setup time   
     configTime(0, 0, "pool.ntp.org", "time.nist.gov");
@@ -281,10 +281,10 @@ void loop()
     float currentBatteryVoltage = readBatteryVoltage();
     logAndPublish("currentBatteryVoltage", String(currentBatteryVoltage),LOG_INFO);
     SerialMon.println("=== MQTT IS CONNECTED ===");
-    SerialMon.println(mqttClientName);
+    SerialMon.println(deviceName);
     mqtt.loop();
     logAndPublish("status", "Going to sleep",LOG_INFO);
-    delay(10000);
+    delay(5000);
     //esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP*1000000); // Sleep for TIME_TO_SLEEP time in microseconds
     //esp_deep_sleep_start();
 

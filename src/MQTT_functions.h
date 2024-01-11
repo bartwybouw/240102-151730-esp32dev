@@ -10,16 +10,20 @@
 #ifndef MQTT_FUNCTIONS_H
 #define MQTT_FUNCTIONS_H
 
-void mqttCallback(char *topic, byte *payload, unsigned int len);
-boolean mqttConnect();
-
-//extern int ledStatus;
-
 enum MqttTopic {
     TOPIC_LED,
     TOPIC_DEVICENAME,  
+    TOPIC_REFRESH_TIME,
     TOPIC_UNKNOWN
 };
+
+void mqttCallback(char *topic, byte *payload, unsigned int len);
+boolean mqttConnect();
+void mqttSubscribeTopic(MqttTopic topic);
+
+//extern int ledStatus;
+
+
 
 // Convert topics
 MqttTopic getTopicType(const char* topic) {
@@ -30,31 +34,68 @@ MqttTopic getTopicType(const char* topic) {
     if (String(topic) == topicDeviceName) {
         return TOPIC_DEVICENAME;
     }
+    if (String(topic) == topicRefreshTime) {
+        return TOPIC_REFRESH_TIME;
+    }
     return TOPIC_UNKNOWN;
 }
+
+const char* getTopicString(MqttTopic topic) {
+    switch (topic) {
+        case TOPIC_LED:
+            return topicLed;
+        case TOPIC_DEVICENAME:
+            return topicDeviceName;
+        case TOPIC_REFRESH_TIME:
+            return topicRefreshTime;
+        // Add other cases as needed
+        default:
+            return nullptr;
+    }
+}
+
+void subscribeToTopics() {
+    for (int i = 0; i < TOPIC_UNKNOWN; ++i) {
+        mqttSubscribeTopic(static_cast<MqttTopic>(i));
+    }
+}
+
+void mqttSubscribeTopic(MqttTopic topic) {
+    const char* topicSuffix = getTopicString(topic);
+    if (topicSuffix != nullptr) {
+        String fullTopic = String(deviceName) + topicSuffix;
+        Serial.println("Subscribing to " + fullTopic);
+        mqtt.subscribe(fullTopic.c_str());
+    } else {
+        Serial.println("Error: Unknown topic enum.");
+    }
+}
+
+
 
 //MQTT
 void mqttCallback(char *topic, byte *payload, unsigned int len) {
     Serial.print("Message arrived [");
     Serial.print(topic);
-    Serial.print("]: ");
+    Serial.println("]: ");
+    Serial.print("Payload : ");
     Serial.write(payload, len);
     Serial.println(); 
 
     // Convert char* topic to String for manipulation
     String strTopic = String(topic);
 
-    // Remove mqttClientName from the topic
-    int startPos = strTopic.indexOf(mqttClientName);
+    // Remove deviceName from the head of the topic
+    int startPos = strTopic.indexOf(deviceName);
     if (startPos != -1) {
-        strTopic.remove(startPos, strlen(mqttClientName) + 1); // +1 to remove the slash
+        strTopic.remove(startPos, strlen(deviceName) + 1); // +1 to remove the slash
     }
 
     // Convert back to char* if necessary
     const int topicBufferSize = 256; // Ensure this is the size of the 'topic' buffer
     strncpy(topic, strTopic.c_str(), topicBufferSize);
     topic[topicBufferSize - 1] = '\0'; // Null-terminate to be safe
-
+    Serial.println("topic : " + String(topic));
     // Only proceed if incoming message's topic matches
     MqttTopic topicType = getTopicType(topic); 
 
@@ -65,32 +106,41 @@ void mqttCallback(char *topic, byte *payload, unsigned int len) {
             logAndPublish("log", "Led status changed to " + String(ledStatus), LOG_INFO);
             mqtt.publish(topicLedStatus, ledStatus ? "1" : "0", true);
             break;
-            }   
+        }   
         case TOPIC_DEVICENAME :{
             // Free the old memory if it was previously allocated
-            //free(mqttClientName);
+            free(deviceName);
 
             // Allocate new memory for the updated name (including null-terminator)
-            mqttClientName = (char*)malloc(strlen(payload) + 1);
+            deviceName = (char*)malloc(len + 1);
 
-            if (mqttClientName != nullptr) {
+            if (deviceName != nullptr) {
                 // Copy the payload into the newly allocated memory
-                strncpy(mqttClientName, (char*)payload, len);
-                mqttClientName[len] = '\0'; // Null-terminate the string
+                strncpy(deviceName, (char*)payload, len);
+                deviceName[len] = '\0'; // Null-terminate the string
+                deviceName[len] = '\0';
+                Serial.print("New deviceName: ");
+                Serial.println(deviceName);
             } else {
                 // Handle memory allocation error
-                Serial.println("Error: Memory allocation failed for mqttClientName.");
+                Serial.println("Error: Memory allocation failed for deviceName.");
                 break;
             }
-
-            logAndPublish("log", "Device name changed to " + String(mqttClientName), LOG_INFO);
+            logAndPublish("log", "Device name changed to " + String(deviceName), LOG_INFO);
             break;
+        }
+        case TOPIC_REFRESH_TIME: {                                      
+            refreshTime = atoi((char*)payload);
+            if (refreshTime == 0) { // atoi returns 0 for non-integer strings
+                refreshTime = DEFAULT_REFRESH_TIME;
             }
+            break;
+        }
         // Add other cases as needed
         case TOPIC_UNKNOWN : {
             Serial.println("Unknown topic : " + String(topic));
             break;
-            }
+        }
     }
 }
 
@@ -102,17 +152,14 @@ boolean mqttConnect()
     //boolean status = mqtt.connect("GsmClientTest");
 
     // Or, if you want to authenticate MQTT:
-     boolean status = mqtt.connect(mqttClientName, mqttUser, mqttPassword);
+     boolean status = mqtt.connect(deviceName, mqttUser, mqttPassword);
 
     if (status == false) {
         Serial.println(" fail");
         return false;
     }
     Serial.println(" success");
-    mqtt.publish(baseTopic.c_str(), "GsmClientTest started", true);
-    String subcribeTopics= String(mqttClientName) + "/deviceName";
-    Serial.println("Subscribing to " + subcribeTopics);
-    mqtt.subscribe(subcribeTopics.c_str()); // Subscribe to all topics for this device 
+    subscribeToTopics();
     return mqtt.connected();
 }
 /*
