@@ -273,6 +273,7 @@ void loop()
             lastReconnectAttempt = t;
             if (mqttConnect()) {
                 lastReconnectAttempt = 0;
+                subscribeToTopics();
             }
         }
         delay(100);

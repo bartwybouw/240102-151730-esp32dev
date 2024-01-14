@@ -20,12 +20,25 @@ const char wifiPass[] = "blijfuitonsnetwerk";
 // MQTT details
 const char* mqttBroker     = "178.116.210.112";
 const int   mqttPort       = 18883;
-const char* InitDeviceName = "TTGO-T-SIM7070G_XYZ";
+const char* InitDeviceName = "TTGO-T-SIM7070G_3";
 char* deviceName = nullptr; // Will be allocated during setup, will contain the name of the system => NEEDS TO BE STORED permanently!!! 
 const char* mqttUser       = "bartw";
 const char* mqttPassword   = "blijfteruit";
 
+// Array of topic strings which will be used to subscribe to topics
+const char* mqttTopics[] = {
+    "init",
+    "led",
+    "ledStatus",
+    "deviceName",
+    "refreshTime"
+};
+
+const int mqttTopicsCount = sizeof(mqttTopics) / sizeof(mqttTopics[0]);
+
+//* OLD TOPICS PART*/
 // Need to add these in MQTT enum MqttTopic
+
 const char *topicLed       = "led";
 const char *topicInit      = "init";
 const char *topicLedStatus = "ledStatus";
