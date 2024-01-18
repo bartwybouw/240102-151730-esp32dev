@@ -51,11 +51,17 @@ const char* getTopicString(MqttTopic topic) {
 }
 
 void subscribeToTopics() {
-    for (int i = 0; i < mqttTopicsCount; ++i) {
-        String fullTopic = String(deviceName) + "/" + mqttTopics[i];
+    #ifdef SUBSCRIBE_TO_ALL_TOPICS
+        String fullTopic = baseTopic + "/#";
         Serial.println("Subscribing to " + fullTopic);
         mqtt.subscribe(fullTopic.c_str());
-    }
+    #else
+        for (int i = 0; i < mqttTopicsCount; ++i) {
+            String fullTopic = String(baseTopic) + "/" + String(deviceName) + "/" + mqttTopics[i];
+            Serial.println("Subscribing to " + fullTopic);
+            mqtt.subscribe(fullTopic.c_str());
+        }
+    #endif
 }
 
 void unsubscribeFromTopics() {
@@ -95,7 +101,8 @@ void mqttCallback(char *topic, byte *payload, unsigned int len) {
                 ledStatus = !ledStatus;
                 digitalWrite(LED_PIN, ledStatus);
                 logAndPublish("log", "Led status changed to " + String(ledStatus), LOG_INFO);
-                mqtt.publish(topicLedStatus, ledStatus ? "1" : "0", true);
+                fullTopic = baseTopic + "/" + deviceName + "/" + topicLedStatus;
+                mqtt.publish(fullTopic.c_str(), ledStatus ? "1" : "0", true);
                 topicHandled = true;
                 break;
             } else if (strcmp(mqttTopics[i], topicDeviceName) == 0) {
@@ -157,6 +164,7 @@ boolean mqttConnect()
     //boolean status = mqtt.connect("GsmClientTest");
 
     // Or, if you want to authenticate MQTT:
+    logAndPublish("log", "deviceName : " + String(deviceName) , LOG_INFO);  
     boolean status = mqtt.connect(deviceName, mqttUser, mqttPassword);
 
     if (status == false) {

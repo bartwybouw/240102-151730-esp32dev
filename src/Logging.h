@@ -1,10 +1,7 @@
 /**************************************************************
  * Bart Wybouw 2/1/2024
  * 
- * This file contains the logging functions
- *  - 
- *  - 
- *  - 
+ * Functions used for logging
  *
  **************************************************************/
 enum logLevel {
@@ -24,15 +21,20 @@ String logLevelToString(logLevel level);
 
 // Log function
 void logAndPublish(String topic, String payload, logLevel level) {
+    // Get current time
+    time_t now;
     time(&now);
-    localtime_r(&now, &timeinfo);
-    SerialMon.println(String(topic + ": " + payload));
-    writeToSDCard(asctime(&timeinfo) + topic + ": " + payload);
-    String mqttTopic = baseTopic + "/" + topic;
-    mqtt.publish(mqttTopic.c_str(), payload.c_str(), true);
-    
-    logLevelToString(level);
-}
+    struct tm* timeinfo = localtime(&now);
+    char timeString[64];
+    strftime(timeString, sizeof(timeString), "%Y-%m-%d %H:%M:%S", timeinfo);
+  
+    // logLevelToString(level); // Convert log level to string, to decided what to do with it
+    // For now nothing is done with the log level, but you could use it to decide what to do with the log message
+    SerialMon.println(String(topic + ": " + payload));  // Print to serial monitor
+    writeToSDCard(asctime(&timeinfo) + topic + ": " + payload); // Write to SD card 
+    fullTopic = baseTopic + "/" + deviceName + "/log/" + mqttTopic.c_str();
+    mqtt.publish(fullTopic.c_str(), payload.c_str(), true); // Publish to MQTT
+}    
 
 String logLevelToString(logLevel level) {
     switch (level) {

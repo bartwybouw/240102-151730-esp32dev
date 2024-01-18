@@ -8,6 +8,11 @@
  *
  **************************************************************/
 
+// SOME GENERAL SETTINGS
+// #define     USE_DEEP_SLEEP //Comment this line if you don't want to use deep sleep
+#define     TEST_NAME // Set this line if you want to force a name during testing
+#define    SUBSCRIBE_TO_ALL_TOPICS // Comment this line if you don't want to subscribe to all topics
+
 // Your GPRS credentials, if any
 const char apn[]      = "em";
 const char gprsUser[] = "";
@@ -20,10 +25,13 @@ const char wifiPass[] = "blijfuitonsnetwerk";
 // MQTT details
 const char* mqttBroker     = "178.116.210.112";
 const int   mqttPort       = 18883;
-const char* InitDeviceName = "TTGO-T-SIM7070G_3";
-char* deviceName = nullptr; // Will be allocated during setup, will contain the name of the system => NEEDS TO BE STORED permanently!!! 
+const char* InitDeviceName = "TTGO-T-SIM7070G_XYZ";
+//char* deviceName = nullptr; // Will be allocated during setup, will contain the name of the system => NEEDS TO BE STORED permanently!!! 
+char* deviceName = "TTGO-T-SIM7070G_3"; // Will be allocated during setup, will contain the name of the system => NEEDS TO BE STORED permanently!!! 
+
 const char* mqttUser       = "bartw";
 const char* mqttPassword   = "blijfteruit";
+String baseTopic = "IIOT"; //This is a prefix for all topics, so you can share a single MQTT server between several projects
 
 // Array of topic strings which will be used to subscribe to topics
 const char* mqttTopics[] = {

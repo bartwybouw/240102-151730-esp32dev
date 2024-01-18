@@ -13,44 +13,50 @@
 #ifdef DEBUG
 #define DEBUG_PRINT(x)  Serial.println(x) // Development mode
 #else
-#define DEBUG_PRINT(x) // Production mode
+#define DEBUG_PRINT(x)               // Production mode
 #endif
 
-#define TINY_GSM_MODEM_SIM7070 // Define modem type
-#define SerialMon Serial // Set serial for debug console (to the Serial Monitor, default speed 115200)
-#define SerialAT Serial1 // Set serial for AT commands (to the module), use Hardware Serial on Mega, Leonardo, Micro
-#define TINY_GSM_DEBUG SerialMon // Define the serial console for debug prints, if needed
+#define TINY_GSM_MODEM_SIM7070       // Define modem type
+#define SerialMon Serial             // Set serial for debug console (to the Serial Monitor, default speed 115200)
+#define SerialAT Serial1             // Set serial for AT commands (to the module), use Hardware Serial on Mega, Leonardo, Micro
+#define TINY_GSM_DEBUG SerialMon     // Define the serial console for debug prints, if needed
 
 //#define DUMP_AT_COMMANDS // See all AT commands, if wanted
 
 // Standard libraries to include
-#include <Arduino.h> // Needed for PlatformIO C++ compatibility
+#include <Arduino.h>                // Needed for PlatformIO C++ compatibility
 #include <TinyGsmClient.h>
 #include <PubSubClient.h>
 #include <Ticker.h>
 #include <SPI.h>
 #include <SD.h>
 #include <esp_adc_cal.h>
+#include "nvs_flash.h"
+#include <Preferences.h>
+#include <time.h>
 
 // Include own files
-#include "ReadMe.h" // Contains additional info on working of the sketch
-#include "credentials.h" // File with credentials
+#include "ReadMe.h"                 // Contains additional info on working of the sketch
+#include "credentials.h"            // File with credentials
+#include "version.h"                // Version info
 
 Ticker tick;
 
-#define uS_TO_S_FACTOR 1000000ULL  // Conversion factor for micro seconds to seconds
-#define TIME_TO_SLEEP  60          // Time ESP32 will go to sleep (in seconds)
-#define LED_PIN 12                 // Blue LED on the ESP32 module, used to indicate GPS lock 
-#define KEEP_ALIVE_TIME 60         // Keep alive time for controller before going to deep sleep
+#define uS_TO_S_FACTOR 1000000ULL   // Conversion factor for micro seconds to seconds
+#define TIME_TO_SLEEP  60           // Time ESP32 will go to sleep (in seconds)
+#define LED_PIN 12                  // Blue LED on the ESP32 module, used to indicate GPS lock 
+#define KEEP_ALIVE_TIME 60          // Keep alive time for controller before going to deep sleep
 
 // Some global definitions
-int ledStatus = LOW;              // Indicates the status of the blue LED
-int vref = 1100;                  // For battery measurement
+int ledStatus = LOW;                // Indicates the status of the blue LED
+int vref = 1100;                    // For battery measurement
 float current_battery_voltage = 9.99; // For battery measurement
 uint32_t lastReconnectAttempt = 0;
-String baseTopic; // Needs to be configured during the onboarding, default in credentials.h
 time_t now;
 struct tm timeinfo;
+String fullTopic;                  // Used to temporarely store the full topic name before using an mqtt.publish
+Preferences preferences;            // Used to store device name in NV RAM
+
 
 #ifdef DUMP_AT_COMMANDS
 #include <StreamDebugger.h>
@@ -65,26 +71,13 @@ TinyGsmClient client(modem);
 PubSubClient  mqtt(client);
 
 // *** Include additional files
-#include "SDcard_functions.h" // All SDcard, storage and storage management ...
-#include "Logging.h" // Functions to do logging, translate debug levels and save and transmit log info
-#include "Modem_functions.h" // All modem related functions and definitions 
-#include "GPS_functions.h" // All GPS related functions and definitions
-#include "MQTT_functions.h" // All MQTT ...
+#include "SDcard_Log_functions.h"   // All SDcard, storage and storage management and log funtions
+#include "Modem_functions.h"        // All modem related functions and definitions 
+#include "GPS_functions.h"          // All GPS related functions and definitions
+#include "MQTT_functions.h"         // All MQTT
+#include "general_functions.h"      // General functions
 
-// Battery Calculation
-float readBatteryVoltage() {
-    uint16_t v = analogRead(ADC_PIN);
-    return ((float)v / 4095.0) * 2.0 * 3.3 * (vref / 1000.0);
-     #ifdef DEBUG 
-        Serial.println("Reading battery voltage"); 
-    #endif
-    // Battery measurement  
-    esp_adc_cal_characteristics_t adc_chars;
-    esp_adc_cal_value_t val_type = esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_12, 1100, &adc_chars);
-    if (val_type == ESP_ADC_CAL_VAL_EFUSE_VREF) {
-        vref = adc_chars.vref;
-    }
-}
+
 
 //****** SETUP ******//
 void setup()
@@ -92,49 +85,46 @@ void setup()
     // Set console baud rate
     Serial.begin(115200);
     Serial.println("Starting...");
-
+    Serial.println("Version: " + String(PROJECT_VERSION_MAJOR) + "." + String(PROJECT_VERSION_MINOR) + "." + String(PROJECT_VERSION_PATCH));
     delay(10);
 
-    // Clear Blue LED
-    pinMode(LED_PIN, OUTPUT);
-    digitalWrite(LED_PIN, HIGH);
-    // Set LED ON = Insert SD-card !!!
-    digitalWrite(LED_PIN, LOW);
+    #ifdef TEST_NAME // TEST_NAME is defined in credentials.h, if not defined, the device name is loaded from NV RAM
+        String LoadedDeviceName = "TTGO-T-SIM7070G_3";
+    #else
+        String LoadedDeviceName = loadDeviceName(); // Load device name from NV RAM
+        deviceName = (char*)malloc(LoadedDeviceName.length() + 1);
+        if (deviceName != nullptr) {
+                        // Copy the payload into the newly allocated memory
+                        strncpy(deviceName, LoadedDeviceName.c_str(), LoadedDeviceName.length());
+                        deviceName[LoadedDeviceName.length()] = '\0'; // Null-terminate the string
+                        Serial.print("New deviceName: ");
+                        Serial.println(deviceName);
+                    } else {
+                        // Handle memory allocation error
+                        Serial.println("Error: Memory allocation failed for deviceName.");
+    
+                    }
+    #endif TEST_NAME
 
-    // Set LED OFF
-    pinMode(LED_PIN, OUTPUT);
-    digitalWrite(LED_PIN, HIGH);
+    pinMode(LED_PIN, OUTPUT);     
+    digitalWrite(LED_PIN, HIGH);    // Clear Blue LED
+    digitalWrite(LED_PIN, LOW);     // Set LED ON = Insert SD-card !!!
 
-    pinMode(PWR_PIN, OUTPUT);
-    digitalWrite(PWR_PIN, HIGH);
-    // Starting the machine requires at least 1 second of low level, and with a level conversion, the levels are opposite
-    delay(5000);
-    digitalWrite(PWR_PIN, LOW);
+    modemPowerOn();                 // Power on the modem
 
-    // Set LED OFF = No longer insert SC-card
-    digitalWrite(LED_PIN, HIGH);
+    digitalWrite(LED_PIN, HIGH);    // Set LED OFF = No longer insert SC-card
 
-    // Prepare SD-card
-    SPI.begin(SD_SCLK, SD_MISO, SD_MOSI, SD_CS);
-    if (!SD.begin(SD_CS, SPI)) {
-        logAndPublish("SDcard","MOUNT FAIL",LOG_INFO);
-    } else {
-        uint32_t cardSize = SD.cardSize() / (1024 * 1024);
-        logAndPublish("SDcard", String(cardSize) + "MB" ,LOG_INFO);
-    }
-    float BatteryVoltage=readBatteryVoltage();
+    setupSDCard();                // Setup SD-card
+    float BatteryVoltage=readBatteryVoltage(); // Read & log battery voltage
     logAndPublish("currentBatteryVoltage",String(BatteryVoltage).c_str(),LOG_INFO);
-    // Waiting for modem initialisation
-    logAndPublish("log", "Wait..." ,LOG_INFO);
-    delay(1000);
+    logAndPublish("log", "Wait for modem initialisation" ,LOG_INFO);
+    //delay(1000);
 
     // Set-up modem serial communication
     SerialAT.begin(UART_BAUD, SERIAL_8N1, PIN_RX, PIN_TX);
 
-    // Restart takes quite some time
-    // To skip it, call init() instead of restart()
     Serial.println("Initializing modem...");
-    if (!modem.init()) {
+    if (!modem.init()) { // Restart takes quite some time. To skip it, call init() instead of restart()
         logAndPublish("log","Failed to restart modem, attempting to continue without restarting", LOG_INFO);
     } else {
         logAndPublish("log","Modem started", LOG_INFO);
@@ -143,14 +133,14 @@ void setup()
     String modemName = modem.getModemName();
     logAndPublish("modem",modemName, LOG_INFO);
     
-#if TINY_GSM_USE_GPRS
+    #if TINY_GSM_USE_GPRS
     // Unlock your SIM card with a PIN if needed
     if (GSM_PIN && modem.getSimStatus() != 3) {
         modem.simUnlock(GSM_PIN);
     }
-#endif
+    #endif
 
-#if TINY_GSM_USE_WIFI
+    #if TINY_GSM_USE_WIFI
     // Wifi connection parameters must be set before waiting for the network
     SerialMon.print(F("Setting SSID/password..."));
     if (!modem.networkConnect(wifiSSID, wifiPass)) {
@@ -159,7 +149,7 @@ void setup()
         return;
     }
     SerialMon.println(" success");
-#endif
+    #endif
 
     SerialMon.print("Waiting for network...");
     if (!modem.waitForNetwork()) {
@@ -172,7 +162,7 @@ void setup()
         SerialMon.println("Network connected");
     }
 
-#if TINY_GSM_USE_GPRS
+    #if TINY_GSM_USE_GPRS
     // GPRS connection parameters are usually set after network registration
     SerialMon.print(F("Connecting to "));
     SerialMon.print(apn);
@@ -186,41 +176,19 @@ void setup()
     if (modem.isGprsConnected()) {
         SerialMon.println("GPRS connected");
     }
-#endif
+    #endif
     
-    // Setup MQTT Client Name with default name that will be update during onbaording via MQTT message 
-    deviceName = (char*)malloc(strlen(InitDeviceName) + 1); // +1 for null terminator
-    if (deviceName != nullptr) {
-        strcpy(deviceName, InitDeviceName);
-    } else {
-        // Handle memory allocation error
-        Serial.println("Critical error: Memory allocation failed. Entering safe mode.");
-        while (true) {
-            delay(1000);
-            ESP.restart();
-        }
-    }
-    // Set the base topic for MQTT messages
-    baseTopic = String(deviceName);
+    // Sync ESP local time with network
+    syncTimeWithNetwork();
 
     // MQTT Broker setup
     mqtt.setServer(mqttBroker, mqttPort);
     mqtt.setCallback(mqttCallback);
-    mqtt.publish(baseTopic.c_str(), deviceName, true);
-
-    // Setup time   
-    configTime(0, 0, "pool.ntp.org", "time.nist.gov");
-    /*
-    // Wait for time to be synchronized
-    time_t now = time(nullptr);
-    while (now < 24 * 3600) {
-        delay(100);
-        now = time(nullptr);
-    }
-    struct tm timeinfo;
-    gmtime_r(&now, &timeinfo);
-    logAndPublish(baseTopic + "/localTime", asctime(&timeinfo)); */
-    logAndPublish("CurrentFileVersion", "MqttClient_Cellular_v1_2",LOG_INFO);
+    mqttConnect();
+    subscribeToTopics();
+    fullTopic = baseTopic + "/" +(deviceName)+ "/" + topicDeviceName;
+    Serial.println("Publishing device name to " + fullTopic);   
+    mqtt.publish(fullTopic.c_str(), deviceName, true);
 }
 
 //****** LOOP ******//
@@ -284,9 +252,14 @@ void loop()
     SerialMon.println("=== MQTT IS CONNECTED ===");
     SerialMon.println(deviceName);
     mqtt.loop();
-    logAndPublish("status", "Going to sleep",LOG_INFO);
-    delay(5000);
-    //esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP*1000000); // Sleep for TIME_TO_SLEEP time in microseconds
-    //esp_deep_sleep_start();
-
+    // If USE_DEEP_SLEEP is defined, the system will go to deep sleep else it will just wait KEEP_ALIVE_TIME seconds    
+    #ifdef USE_DEEP_SLEEP
+        logAndPublish("status", "Going to sleep",LOG_INFO);
+        Serial.flush();
+        modemPowerOff(); // Power off the modem
+        esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP*1000000); // Sleep for TIME_TO_SLEEP time in microseconds
+        esp_deep_sleep_start();
+    #else
+        delay(KEEP_ALIVE_TIME*1000);
+    #endif USE_DEEP_SLEEP
 }

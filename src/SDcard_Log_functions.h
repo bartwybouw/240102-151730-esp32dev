@@ -1,15 +1,15 @@
 /**************************************************************
  * Bart Wybouw 1/1/2024
  * 
- * This file contains the SDcard, storage and storage managemnt
- * related functions and definitions
+ * This file contains the SDcard, storage and storage management
+ * and logging related functions and definitions
  *  - 
  *  - 
  *  - 
  *
  **************************************************************/
-#ifndef SDCARD_FUNCTIONS_H
-#define SDCARD_FUNCTIONS_H
+#ifndef SDCARD_LOG_FUNCTIONS_H
+#define SDCARD_LOG_FUNCTIONS_H
 
 enum DataType {
     DATA_POINT,
@@ -17,9 +17,22 @@ enum DataType {
     WARNING_MESSAGE
 };
 
+enum logLevel {
+    LOG_DEBUG,
+    LOG_INFO,
+    LOG_NOTICE,
+    LOG_WARNING,
+    LOG_ERROR,
+    LOG_CRITICAL,
+    LOG_ALERT,
+    LOG_EMERGENCY
+};
+
 void writeToSDCard(String data);
 void archiveDataFile();
 void logToSDCard(const String& data, DataType type);
+void logAndPublish(String topic, String payload, enum logLevel);
+String logLevelToString(logLevel level);
 
 // Define pins for SD-card
 #define SD_MISO     2
@@ -30,6 +43,18 @@ void logToSDCard(const String& data, DataType type);
 File dataFile; // File object for SD card operations
 const char* dataFileName = "/log.txt";
 const unsigned long maxFileSize = 1024 * 10; // Maximum file size in bytes (e.g., 10 KB)
+
+void setupSDCard() {
+    // Prepare SD-card
+    SPI.begin(SD_SCLK, SD_MISO, SD_MOSI, SD_CS);
+    if (!SD.begin(SD_CS, SPI)) {
+        logAndPublish("SDcard","MOUNT FAIL",LOG_INFO);
+    } else {
+        uint32_t cardSize = SD.cardSize() / (1024 * 1024);
+        logAndPublish("SDcard", String(cardSize) + "MB" ,LOG_INFO);
+    }
+}
+
 
 // Write to SD-card 
 void writeToSDCard(String data) {
@@ -56,8 +81,8 @@ void archiveDataFile() {
         archiveName = "archive" + String(archiveNumber) + ".txt";
         archiveNumber++;
     } while (SD.exists(archiveName.c_str()));
-
     SD.rename(dataFileName, archiveName.c_str());
+    logAndPublish("SDcard","Archived data file as " + archiveName,LOG_INFO);
 }
 
 // Function to log data to SD card
@@ -76,4 +101,26 @@ void logToSDCard(const String& data, DataType type) {
     }
 }
 
-#endif // SDCARD_FUNCTIONS_H
+// Log function
+void logAndPublish(String topic, String payload, logLevel level) {
+    time(&now);
+    localtime_r(&now, &timeinfo);
+    SerialMon.println(String(topic + ": " + payload));
+    writeToSDCard(asctime(&timeinfo) + topic + ": " + payload);
+    String mqttTopic = baseTopic + "/" + topic;
+    mqtt.publish(mqttTopic.c_str(), payload.c_str(), true);
+    
+    logLevelToString(level);
+}
+
+String logLevelToString(logLevel level) {
+    switch (level) {
+        case LOG_DEBUG: return "DEBUG";
+        case LOG_INFO: return "INFO";
+        case LOG_WARNING: return "WARNING";
+        case LOG_ERROR: return "ERROR";
+        default: return "UNKNOWN";
+    }
+}
+
+#endif // SDCARD_LOG_FUNCTIONS_H
