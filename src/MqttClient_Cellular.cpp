@@ -48,7 +48,7 @@ Ticker tick;
 #define uS_TO_S_FACTOR 1000000ULL   // Conversion factor for micro seconds to seconds
 #define TIME_TO_SLEEP  60           // Time ESP32 will go to sleep (in seconds)
 #define LED_PIN 12                  // Blue LED on the ESP32 module, used to indicate GPS lock 
-#define KEEP_ALIVE_TIME 60          // Keep alive time for controller before going to deep sleep
+#define KEEP_ALIVE_TIME 10          // Keep alive time for controller before going to deep sleep
 
 // Some global definitions
 int ledStatus = LOW;                // Indicates the status of the blue LED
@@ -180,7 +180,7 @@ void setup()
     #endif
     
     // Sync ESP local time with network
-    syncTimeWithNetwork();
+    syncTimeWithNetwork(modem);
 
     // MQTT Broker setup
     mqtt.setServer(mqttBroker, mqttPort);
@@ -250,6 +250,8 @@ void loop()
     }
     currentBatteryVoltage = readBatteryVoltage();
     logAndPublish("currentBatteryVoltage", String(currentBatteryVoltage),LOG_INFO);
+    syncTimeWithNetwork(modem);
+
     SerialMon.println("=== MQTT IS CONNECTED ===");
     SerialMon.println(deviceName);
     mqtt.loop();

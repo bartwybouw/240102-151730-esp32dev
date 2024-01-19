@@ -108,7 +108,10 @@ void mqttCallback(char *topic, byte *payload, unsigned int len) {
             } else if (strcmp(mqttTopics[i], topicDeviceName) == 0) {
                 // *** Topic = Device Name
                 // Free the old memory if it was previously allocated
-                free(deviceName);
+                if (deviceName != nullptr) {
+                    free(deviceName);
+                    deviceName = nullptr;
+                }
 
                 // Allocate new memory for the updated name (including null-terminator)
                 deviceName = (char*)malloc(len + 1);

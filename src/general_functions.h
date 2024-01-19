@@ -5,6 +5,12 @@
  *
  **************************************************************/
 
+void saveDeviceName(const char* deviceName);
+String loadDeviceName();
+float readBatteryVoltage();
+void syncTimeWithNetwork(TinyGsm& modem);
+String getNetworkDateTime(TinyGsm& modem);
+
 // Save deviceName to ESP32 NVS (Non-Volatile Storage)
 void saveDeviceName(const char* deviceName) {
     preferences.begin("nvs", false); // "general" is the namespace; false for read/write mode
@@ -41,12 +47,41 @@ float readBatteryVoltage() {
 }
 
 // Sync network time to ESP32 local clock
-void syncTimeWithNetwork() {
-  String dateTime = modem.getGSMDateTime(DATE_TIME);
-  struct tm tm;
-  if (strptime(dateTime.c_str(), "%Y/%m/%d,%H:%M:%S+00", &tm)) {
-    time_t t = mktime(&tm);
-    timeval tv = { t, 0 };
-    settimeofday(&tv, NULL);
-  }
+void syncTimeWithNetwork(TinyGsm& modem) {
+    String dateTime = getNetworkDateTime(modem);
+    if (dateTime.length() > 0) {
+        struct tm tm;
+        // Adjust the format specifier according to the actual dateTime format
+        if (strptime(dateTime.c_str(), "%y/%m/%d,%H:%M:%S", &tm)) {
+            time_t t = mktime(&tm);
+            timeval tv = { t, 0 };
+            settimeofday(&tv, NULL);
+
+            // Print the synchronized date and time
+            char timeString[64];
+            strftime(timeString, sizeof(timeString), "%Y-%m-%d %H:%M:%S", &tm);
+            Serial.print("Network Time Synced: ");
+            Serial.println(timeString);
+        } else {
+            Serial.println("Failed to parse network time");
+        }
+    } else {
+        Serial.println("Failed to get network time");
+    }
 }
+
+String getNetworkDateTime(TinyGsm& modem) {
+    modem.sendAT("+CCLK?");
+    String response;
+    if (modem.waitResponse(10000L, response) == 1) {
+        // Processing the response to extract the date-time string
+        int index = response.indexOf("\"");
+        if (index != -1) {
+            String dateTime = response.substring(index + 1, response.lastIndexOf("\""));
+            return dateTime; // Return the extracted date-time string
+        }
+    }
+    return "";
+}
+
+
