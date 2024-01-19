@@ -11,7 +11,7 @@
 // SOME GENERAL SETTINGS
 // #define     USE_DEEP_SLEEP //Comment this line if you don't want to use deep sleep
 #define     TEST_NAME // Set this line if you want to force a name during testing
-#define    SUBSCRIBE_TO_ALL_TOPICS // Comment this line if you don't want to subscribe to all topics
+#define     SUBSCRIBE_TO_ALL_TOPICS // Comment this line if you don't want to subscribe to all topics
 
 // Your GPRS credentials, if any
 const char apn[]      = "em";

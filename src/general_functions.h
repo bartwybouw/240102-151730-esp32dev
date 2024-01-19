@@ -24,7 +24,7 @@ String loadDeviceName() {
     Serial.println("Device name: " + name);
     return name;
 }
-
+    
 // Battery Calculation
 float readBatteryVoltage() {
     uint16_t v = analogRead(ADC_PIN);

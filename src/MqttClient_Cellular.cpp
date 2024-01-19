@@ -10,6 +10,9 @@
 *
 **************************************************************/
 // Define DEBUG mode with extra output to serial monitor
+
+#define DEBUG
+
 #ifdef DEBUG
 #define DEBUG_PRINT(x)  Serial.println(x) // Development mode
 #else
@@ -50,7 +53,7 @@ Ticker tick;
 // Some global definitions
 int ledStatus = LOW;                // Indicates the status of the blue LED
 int vref = 1100;                    // For battery measurement
-float current_battery_voltage = 9.99; // For battery measurement
+float currentBatteryVoltage = 9.99; // For battery measurement
 uint32_t lastReconnectAttempt = 0;
 time_t now;
 struct tm timeinfo;
@@ -115,8 +118,6 @@ void setup()
     digitalWrite(LED_PIN, HIGH);    // Set LED OFF = No longer insert SC-card
 
     setupSDCard();                // Setup SD-card
-    float BatteryVoltage=readBatteryVoltage(); // Read & log battery voltage
-    logAndPublish("currentBatteryVoltage",String(BatteryVoltage).c_str(),LOG_INFO);
     logAndPublish("log", "Wait for modem initialisation" ,LOG_INFO);
     //delay(1000);
 
@@ -247,19 +248,21 @@ void loop()
         delay(100);
         return;
     }
-    float currentBatteryVoltage = readBatteryVoltage();
+    currentBatteryVoltage = readBatteryVoltage();
     logAndPublish("currentBatteryVoltage", String(currentBatteryVoltage),LOG_INFO);
     SerialMon.println("=== MQTT IS CONNECTED ===");
     SerialMon.println(deviceName);
     mqtt.loop();
     // If USE_DEEP_SLEEP is defined, the system will go to deep sleep else it will just wait KEEP_ALIVE_TIME seconds    
     #ifdef USE_DEEP_SLEEP
-        logAndPublish("status", "Going to sleep",LOG_INFO);
+        logAndPublish("status", "Going to deep sleep",LOG_INFO);
         Serial.flush();
         modemPowerOff(); // Power off the modem
         esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP*1000000); // Sleep for TIME_TO_SLEEP time in microseconds
         esp_deep_sleep_start();
     #else
+        logAndPublish("status", "Going to sleep",LOG_INFO);
+        Serial.println("Going to sleep for " + String(KEEP_ALIVE_TIME) + " seconds");
         delay(KEEP_ALIVE_TIME*1000);
     #endif USE_DEEP_SLEEP
 }

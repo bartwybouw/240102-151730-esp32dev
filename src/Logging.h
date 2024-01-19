@@ -30,10 +30,12 @@ void logAndPublish(String topic, String payload, logLevel level) {
   
     // logLevelToString(level); // Convert log level to string, to decided what to do with it
     // For now nothing is done with the log level, but you could use it to decide what to do with the log message
-    SerialMon.println(String(topic + ": " + payload));  // Print to serial monitor
+    Serial.println(">>>" +String(topic + ": " + payload));  // Print to serial monitor
     writeToSDCard(asctime(&timeinfo) + topic + ": " + payload); // Write to SD card 
-    fullTopic = baseTopic + "/" + deviceName + "/log/" + mqttTopic.c_str();
+    fullTopic = baseTopic + "/" + deviceName + "/log/" + topic; // Create full topic
+    Serial.println(" >>> Log & Publish : Publishing to " + fullTopic + ": " + payload); // Print to serial monitor
     mqtt.publish(fullTopic.c_str(), payload.c_str(), true); // Publish to MQTT
+    mqtt.publish(fullTopic.c_str(), "blahblah", true); // Publish to MQTT
 }    
 
 String logLevelToString(logLevel level) {
