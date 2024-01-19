@@ -26,8 +26,8 @@ const char wifiPass[] = "blijfuitonsnetwerk";
 const char* mqttBroker     = "178.116.210.112";
 const int   mqttPort       = 18883;
 const char* InitDeviceName = "TTGO-T-SIM7070G_XYZ";
-//char* deviceName = nullptr; // Will be allocated during setup, will contain the name of the system => NEEDS TO BE STORED permanently!!! 
-char* deviceName = "TTGO-T-SIM7070G_3"; // Will be allocated during setup, will contain the name of the system => NEEDS TO BE STORED permanently!!! 
+char* deviceName = nullptr;                         // Will be allocated during setup, will contain the name of the system => NEEDS TO BE STORED permanently!!! 
+const char* THISdeviceName = "TTGO-T-SIM7070G_1"; // Only use to force a name during testing, combine with >>#define TEST_NAME<<
 
 const char* mqttUser       = "bartw";
 const char* mqttPassword   = "blijfteruit";
@@ -37,9 +37,10 @@ String baseTopic = "IIOT"; //This is a prefix for all topics, so you can share a
 const char* mqttTopics[] = {
     "init",
     "led",
-    "ledStatus",
     "deviceName",
-    "refreshTime"
+    "updateTime",
+    "useDeepSleep",
+    "espRestart"
 };
 
 const int mqttTopicsCount = sizeof(mqttTopics) / sizeof(mqttTopics[0]);
@@ -51,8 +52,10 @@ const char *topicLed       = "led";
 const char *topicInit      = "init";
 const char *topicLedStatus = "ledStatus";
 const char *topicDeviceName = "deviceName";
-const char *topicRefreshTime = "refreshTime";
+const char *topicUpdateTime = "updateTime";
+const char *topicUseDeepSleep = "useDeepSleep";
+const char *topicEspRestart = "espRestart";
+
 
 // MQTT Client
-#define DEFAULT_REFRESH_TIME 180
-unsigned int refreshTime = DEFAULT_REFRESH_TIME;
+#define DEFAULT_UPDATE_TIME 10 // Time in seconds between updates to the MQTT server

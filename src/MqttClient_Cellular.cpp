@@ -14,9 +14,11 @@
 #define DEBUG
 
 #ifdef DEBUG
-#define DEBUG_PRINT(x)  Serial.println(x) // Development mode
+#define DEBUG_PRINT(x)  Serial.print(x) // Development mode
+#define DEBUG_PRINTLN(x)  Serial.println(x) // Development mode
 #else
 #define DEBUG_PRINT(x)               // Production mode
+#define DEBUG_PRINTLN(x)               // Production mode
 #endif
 
 #define TINY_GSM_MODEM_SIM7070       // Define modem type
@@ -40,13 +42,13 @@
 
 // Include own files
 #include "ReadMe.h"                 // Contains additional info on working of the sketch
-#include "credentials.h"            // File with credentials
+#include "settings.h"               // File with settings
 #include "version.h"                // Version info
 
 Ticker tick;
 
 #define uS_TO_S_FACTOR 1000000ULL   // Conversion factor for micro seconds to seconds
-#define TIME_TO_SLEEP  60           // Time ESP32 will go to sleep (in seconds)
+#define UPDATE_TIME  60           // Time ESP32 will go to sleep (in seconds)
 #define LED_PIN 12                  // Blue LED on the ESP32 module, used to indicate GPS lock 
 #define KEEP_ALIVE_TIME 10          // Keep alive time for controller before going to deep sleep
 
@@ -57,9 +59,15 @@ float currentBatteryVoltage = 9.99; // For battery measurement
 uint32_t lastReconnectAttempt = 0;
 time_t now;
 struct tm timeinfo;
-String fullTopic;                  // Used to temporarely store the full topic name before using an mqtt.publish
+String fullTopic;                   // Used to temporarely store the full topic name before using an mqtt.publish
 Preferences preferences;            // Used to store device name in NV RAM
-
+boolean useDeepSleep = false;       // Used to indicate if deep sleep is used or not
+boolean espRestart = false;         // Used to indicate if ESP32 needs to be restarted
+unsigned long updateTime = DEFAULT_UPDATE_TIME; // Time interval for updates (in milliseconds)
+unsigned long lastUpdateTime = 0;   // Tracks the last update time
+unsigned long restartTime = 0;
+const unsigned long delayBeforeRestart = 5000; // Delay in milliseconds (5000ms = 5 seconds)
+bool messageProcessed = false;      // Global flag indicating if a message has been processed in the last MQTT loop
 
 #ifdef DUMP_AT_COMMANDS
 #include <StreamDebugger.h>
@@ -89,25 +97,26 @@ void setup()
     Serial.begin(115200);
     Serial.println("Starting...");
     Serial.println("Version: " + String(PROJECT_VERSION_MAJOR) + "." + String(PROJECT_VERSION_MINOR) + "." + String(PROJECT_VERSION_PATCH));
-    delay(10);
 
     #ifdef TEST_NAME // TEST_NAME is defined in credentials.h, if not defined, the device name is loaded from NV RAM
-        String LoadedDeviceName = "TTGO-T-SIM7070G_3";
+        String LoadedDeviceName = THISdeviceName;
     #else
         String LoadedDeviceName = loadDeviceName(); // Load device name from NV RAM
-        deviceName = (char*)malloc(LoadedDeviceName.length() + 1);
-        if (deviceName != nullptr) {
-                        // Copy the payload into the newly allocated memory
-                        strncpy(deviceName, LoadedDeviceName.c_str(), LoadedDeviceName.length());
-                        deviceName[LoadedDeviceName.length()] = '\0'; // Null-terminate the string
-                        Serial.print("New deviceName: ");
-                        Serial.println(deviceName);
-                    } else {
-                        // Handle memory allocation error
-                        Serial.println("Error: Memory allocation failed for deviceName.");
-    
-                    }
-    #endif TEST_NAME
+    #endif
+
+    deviceName = (char*)malloc(LoadedDeviceName.length() + 1);
+    if (deviceName != nullptr) {
+                    // Copy the payload into the newly allocated memory
+                    strncpy(deviceName, LoadedDeviceName.c_str(), LoadedDeviceName.length());
+                    deviceName[LoadedDeviceName.length()] = '\0'; // Null-terminate the string
+                    Serial.print("deviceName: ");
+                    Serial.println(deviceName);
+                } else {
+                    // Handle memory allocation error
+                    Serial.println("Error: Memory allocation failed for deviceName.");
+
+    }
+    // delay(3000);
 
     pinMode(LED_PIN, OUTPUT);     
     digitalWrite(LED_PIN, HIGH);    // Clear Blue LED
@@ -118,7 +127,7 @@ void setup()
     digitalWrite(LED_PIN, HIGH);    // Set LED OFF = No longer insert SC-card
 
     setupSDCard();                // Setup SD-card
-    logAndPublish("log", "Wait for modem initialisation" ,LOG_INFO);
+    //logAndPublish("log", "Wait for modem initialisation" ,LOG_INFO);
     //delay(1000);
 
     // Set-up modem serial communication
@@ -183,13 +192,15 @@ void setup()
     syncTimeWithNetwork(modem);
 
     // MQTT Broker setup
-    mqtt.setServer(mqttBroker, mqttPort);
-    mqtt.setCallback(mqttCallback);
-    mqttConnect();
-    subscribeToTopics();
-    fullTopic = baseTopic + "/" +(deviceName)+ "/" + topicDeviceName;
+    mqtt.setServer(mqttBroker, mqttPort);       // Set MQTT broker
+    mqtt.setCallback(mqttCallback);             // Set MQTT callback function
+    mqttConnect();                              // Connect to MQTT broker
+    publishParameterTopics();                   // Publish all parameters to MQTT broker
+    subscribeToTopics();                        // Subscribe to topics
+
+    /*fullTopic = baseTopic + "/" +(deviceName)+ "/" + topicDeviceName;
     Serial.println("Publishing device name to " + fullTopic);   
-    mqtt.publish(fullTopic.c_str(), deviceName, true);
+    mqtt.publish(fullTopic.c_str(), deviceName, true); */
 }
 
 //****** LOOP ******//
@@ -252,19 +263,35 @@ void loop()
     logAndPublish("currentBatteryVoltage", String(currentBatteryVoltage),LOG_INFO);
     syncTimeWithNetwork(modem);
 
-    SerialMon.println("=== MQTT IS CONNECTED ===");
-    SerialMon.println(deviceName);
-    mqtt.loop();
+    DEBUG_PRINTLN("=== MQTT IS CONNECTED ===");
+    DEBUG_PRINTLN(deviceName);
+
+    int safetyCounter = 0; // Safety mechanism to avoid infinite loop
+    int maxIterations = 10; // Maximum iterations to process in one loop cycle
+
+    do  {
+        messageProcessed = false; // Reset the flag
+        mqtt.loop();
+        safetyCounter++;
+        DEBUG_PRINTLN("Safety counter: " + String(safetyCounter));
+        /* mqtt.loop();
+        safetyCounter++;
+        DEBUG_PRINTLN("Safety counter: " + String(safetyCounter));
+        mqtt.loop();
+        safetyCounter++;
+        DEBUG_PRINTLN("Safety counter: " + String(safetyCounter)); */
+    } while (messageProcessed && safetyCounter < maxIterations);
+    
     // If USE_DEEP_SLEEP is defined, the system will go to deep sleep else it will just wait KEEP_ALIVE_TIME seconds    
-    #ifdef USE_DEEP_SLEEP
+    if (useDeepSleep) {
         logAndPublish("status", "Going to deep sleep",LOG_INFO);
         Serial.flush();
         modemPowerOff(); // Power off the modem
-        esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP*1000000); // Sleep for TIME_TO_SLEEP time in microseconds
+        esp_sleep_enable_timer_wakeup(updateTime*1000000); // Sleep for TIME_TO_SLEEP time in microseconds
         esp_deep_sleep_start();
-    #else
+    } else {
         logAndPublish("status", "Going to sleep",LOG_INFO);
-        Serial.println("Going to sleep for " + String(KEEP_ALIVE_TIME) + " seconds");
-        delay(KEEP_ALIVE_TIME*1000);
-    #endif USE_DEEP_SLEEP
+        Serial.println("Going to sleep for " + String(updateTime) + " seconds");
+        delay(updateTime*1000);
+    }
 }

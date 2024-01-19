@@ -5,12 +5,18 @@
  *
  **************************************************************/
 
+// *** Function definitions ***
+// ****************************
 void saveDeviceName(const char* deviceName);
 String loadDeviceName();
 float readBatteryVoltage();
 void syncTimeWithNetwork(TinyGsm& modem);
 String getNetworkDateTime(TinyGsm& modem);
+void initiateRestart();
+void performDelayedRestart();
 
+// *** Function implementations ***
+// ********************************
 // Save deviceName to ESP32 NVS (Non-Volatile Storage)
 void saveDeviceName(const char* deviceName) {
     preferences.begin("nvs", false); // "general" is the namespace; false for read/write mode
@@ -84,4 +90,18 @@ String getNetworkDateTime(TinyGsm& modem) {
     return "";
 }
 
+void initiateRestart() {
+    if (restartTime == 0) { // Start the timer if it's not already running
+        restartTime = millis();
+        Serial.println("Restart initiated. Continuing operations for a few seconds...");
+        // Add any immediate pre-restart actions here (e.g., send an MQTT message)
+    }
+}
 
+void performDelayedRestart() {
+    if (restartTime > 0 && millis() - restartTime >= delayBeforeRestart) {
+        // Perform any final actions here (e.g., send final MQTT message, write logs)
+        Serial.println("Performing restart...");
+        ESP.restart();
+    }
+}

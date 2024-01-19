@@ -13,14 +13,21 @@
 enum MqttTopic {
     TOPIC_LED,
     TOPIC_DEVICENAME,  
-    TOPIC_REFRESH_TIME,
+    TOPIC_UPDATE_TIME,
+    TOPIC_USE_DEEP_SLEEP,
+    TOPIC_ESP_RESTART,
     TOPIC_UNKNOWN
 };
-
-void mqttCallback(char *topic, byte *payload, unsigned int len);
-boolean mqttConnect();
+// *** Function definitions ***
+MqttTopic getTopicType(const char* topic);
+const char* getTopicString(MqttTopic topic) ;
 void subscribeToTopics();
+void unsubscribeFromTopics();
+void mqttCallback(char *topic, byte *payload, unsigned int len);
+void updateDeviceName(const char* newName, unsigned int len);
+boolean mqttConnect();
 
+// *** Function implementations ***
 // Convert topics
 MqttTopic getTopicType(const char* topic) {
     Serial.println("getTopicType");
@@ -30,9 +37,16 @@ MqttTopic getTopicType(const char* topic) {
     if (String(topic) == topicDeviceName) {
         return TOPIC_DEVICENAME;
     }
-    if (String(topic) == topicRefreshTime) {
-        return TOPIC_REFRESH_TIME;
+    if (String(topic) == topicUpdateTime) {
+        return TOPIC_UPDATE_TIME;
     }
+    if (String(topic) == topicUseDeepSleep) {
+        return TOPIC_USE_DEEP_SLEEP;
+    }
+    if (String(topic) == topicEspRestart) {
+        return TOPIC_ESP_RESTART;
+    }
+    
     return TOPIC_UNKNOWN;
 }
 
@@ -42,12 +56,31 @@ const char* getTopicString(MqttTopic topic) {
             return topicLed;
         case TOPIC_DEVICENAME:
             return topicDeviceName;
-        case TOPIC_REFRESH_TIME:
-            return topicRefreshTime;
+        case TOPIC_UPDATE_TIME:
+            return topicUpdateTime;
+        case TOPIC_USE_DEEP_SLEEP:
+            return topicUseDeepSleep;
+        case TOPIC_ESP_RESTART:
+            return topicEspRestart;
         // Add other cases as needed
         default:
             return nullptr;
     }
+}
+
+void publishParameterTopics() {
+    // Publish the device name
+    fullTopic = baseTopic + "/" + deviceName + "/" + topicDeviceName;
+    mqtt.publish(fullTopic.c_str(), deviceName, true);
+    // Publish the update time
+    fullTopic = baseTopic + "/" + deviceName + "/" + topicUpdateTime;
+    mqtt.publish(fullTopic.c_str(), String(updateTime).c_str(), true);
+    // Publish the use deep sleep
+    fullTopic = baseTopic + "/" + deviceName + "/" + topicUseDeepSleep;
+    mqtt.publish(fullTopic.c_str(), String(useDeepSleep).c_str(), true);
+    // Publish the esp restart
+    fullTopic = baseTopic + "/" + deviceName + "/" + topicEspRestart;
+    mqtt.publish(fullTopic.c_str(), String(espRestart).c_str(), true);
 }
 
 void subscribeToTopics() {
@@ -57,7 +90,7 @@ void subscribeToTopics() {
         mqtt.subscribe(fullTopic.c_str());
     #else
         for (int i = 0; i < mqttTopicsCount; ++i) {
-            String fullTopic = String(baseTopic) + "/" + String(deviceName) + "/" + mqttTopics[i];
+            String fullTopic = String(baseTopic) + "/" + String(deviceName) + "/SET/" + mqttTopics[i];
             Serial.println("Subscribing to " + fullTopic);
             mqtt.subscribe(fullTopic.c_str());
         }
@@ -75,27 +108,31 @@ void unsubscribeFromTopics() {
 
 //MQTT Callback
 void mqttCallback(char *topic, byte *payload, unsigned int len) {
-    Serial.print("Message arrived [");
-    Serial.print(topic);
-    Serial.println("]: ");
-    Serial.print("Payload: ");
-    Serial.write(payload, len);
-    Serial.println();
+    messageProcessed = true;     // Set the flag
+    DEBUG_PRINT("Message arrived [");
+    DEBUG_PRINT(topic);
+    DEBUG_PRINTLN("]");
 
-    // Convert char* topic to String for manipulation
+    // Convert payload to a null-terminated string
+    char message[len + 1];
+    memcpy(message, payload, len);
+    message[len] = '\0';
+
+    DEBUG_PRINT("Payload: =");
+    DEBUG_PRINT(message);
+    DEBUG_PRINTLN("=");
+
+    // Process the topic
     String strTopic = String(topic);
-
-    // Remove deviceName from the head of the topic
-    String processedTopic = strTopic.substring(strlen(deviceName) + 1); // +1 to remove the slash
-    Serial.print("Processed Topic: ");
-    Serial.println(processedTopic);
+    String processedTopic = strTopic.substring(strTopic.lastIndexOf('/') + 1);
+    DEBUG_PRINT("Processed Topic: ");
+    DEBUG_PRINTLN(processedTopic);
 
     // Check if the topic matches any in the mqttTopics array
     bool topicHandled = false;
     for (int i = 0; i < mqttTopicsCount; ++i) {
-        if (processedTopic.endsWith(mqttTopics[i])) {
-            // Handle the topic based on the suffix
-            // Topic = led
+        if (processedTopic.equals(mqttTopics[i])) {
+            //  Handle the topic based on the suffix
             if (strcmp(mqttTopics[i], "led") == 0) {
                 // *** Handle LED topic
                 ledStatus = !ledStatus;
@@ -106,56 +143,81 @@ void mqttCallback(char *topic, byte *payload, unsigned int len) {
                 topicHandled = true;
                 break;
             } else if (strcmp(mqttTopics[i], topicDeviceName) == 0) {
-                // *** Topic = Device Name
-                // Free the old memory if it was previously allocated
-                if (deviceName != nullptr) {
-                    free(deviceName);
-                    deviceName = nullptr;
-                }
-
-                // Allocate new memory for the updated name (including null-terminator)
-                deviceName = (char*)malloc(len + 1);
-
-                if (deviceName != nullptr) {
-                    // Copy the payload into the newly allocated memory
-                    strncpy(deviceName, (char*)payload, len);
-                    deviceName[len] = '\0'; // Null-terminate the string
-                    deviceName[len] = '\0';
-                    Serial.print("New deviceName: ");
-                    Serial.println(deviceName);
-                } else {
-                    // Handle memory allocation error
-                    Serial.println("Error: Memory allocation failed for deviceName.");
+                // *** Handle device name update
+                if (deviceName != (char*)payload) {
+                    updateDeviceName(message, len);
+                    logAndPublish("log", "Device name changed to " + String(deviceName), LOG_INFO);
+                    topicHandled = true;
+                    break;  /* code */
+                } else { // Same name
+                    logAndPublish("log", "Device name not changed", LOG_INFO);
+                    topicHandled = true;
                     break;
                 }
-                logAndPublish("log", "Device name changed to " + String(deviceName), LOG_INFO);
-                logAndPublish("log", "Reconnecting to MQTT-broker " + String(deviceName), LOG_INFO);
-                mqtt.disconnect();
-                delay(1000);  //
-                mqttConnect();       
-                logAndPublish("log", "Resubscribing to topics with new device name " + String(deviceName), LOG_INFO);
-                unsubscribeFromTopics();
-                subscribeToTopics();
-
-                topicHandled = true;
-                break;
-            } else if (strcmp(mqttTopics[i], topicRefreshTime) == 0) {
-                // *** Topic Refresh Time
-                refreshTime = atoi((char*)payload);
-                if (refreshTime == 0) {
-                    refreshTime = DEFAULT_REFRESH_TIME;
+            } else if (strcmp(mqttTopics[i], topicUpdateTime) == 0) {
+                // *** Topic Update Time
+                updateTime = atoi((char*)payload);
+                if (updateTime == 0) {
+                    updateTime = DEFAULT_UPDATE_TIME;
                 }
+                logAndPublish("log", "Update time changed to " + String(updateTime), LOG_INFO);
                 topicHandled = true;
                 break;
+            } else if (strcmp(mqttTopics[i], topicUseDeepSleep) == 0) {
+                // *** Topic use Deep Sleep
+                String fullPayload;
+                if (String(message) == "1") {
+                    useDeepSleep = true;
+                    fullPayload = "useDeepSleep state changed to true ";
+                } else {
+                    useDeepSleep = false;
+                    fullPayload = "useDeepSleep state changed to false ";
+                }
+
+                DEBUG_PRINTLN("Full payload: " + fullPayload);
+                logAndPublish("log", fullPayload, LOG_INFO);
+                topicHandled = true;
+                break;
+            }  else if (strcmp(mqttTopics[i], topicEspRestart) == 0) {
+                // *** Topic use Deep Sleep
+                espRestart = true;
+                logAndPublish("log", "Restarting ESP", LOG_INFO);
+                
+                topicHandled = true;
+                break;
+            } else {
+                Serial.println("Unknown topic: " + processedTopic);
+                topicHandled = true;
+                break;
+            }
+
+            // Add other topic handlers here
         }
     }
-    }
+
     if (!topicHandled) {
         Serial.println("Unknown topic: " + processedTopic);
-    }  else {
+    } else {
         Serial.println("Handled topic: " + processedTopic);
     }
 }
+
+void updateDeviceName(const char* newName, unsigned int len) {
+    if (deviceName != nullptr) {
+        free(deviceName);
+    }
+    deviceName = (char*)malloc(len + 1);
+    if (deviceName != nullptr) {
+        strncpy(deviceName, newName, len);
+        deviceName[len] = '\0';
+        Serial.print("New deviceName: ");
+        Serial.println(deviceName);
+    } else {
+        Serial.println("Error: Memory allocation failed for deviceName.");
+    }
+    // Additional logic for handling new device name
+}
+
 
 
 // Function to connect and subscribe to topics
