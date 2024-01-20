@@ -85,8 +85,8 @@ PubSubClient  mqtt(client);
 #include "SDcard_Log_functions.h"   // All SDcard, storage and storage management and log funtions
 #include "Modem_functions.h"        // All modem related functions and definitions 
 #include "GPS_functions.h"          // All GPS related functions and definitions
-#include "MQTT_functions.h"         // All MQTT
 #include "general_functions.h"      // General functions
+#include "MQTT_functions.h"         // All MQTT
 
 
 
@@ -117,6 +117,10 @@ void setup()
 
     }
     // delay(3000);
+    // Read Device settings from NVS
+    updateTime = loadDeviceParameter("updateTime").toInt();
+    loadDeviceParameter("useDeepSleep");    
+    loadDeviceParameter("deviceName");
 
     pinMode(LED_PIN, OUTPUT);     
     digitalWrite(LED_PIN, HIGH);    // Clear Blue LED
@@ -282,7 +286,7 @@ void loop()
         DEBUG_PRINTLN("Safety counter: " + String(safetyCounter)); */
     } while (messageProcessed && safetyCounter < maxIterations);
     
-    // If USE_DEEP_SLEEP is defined, the system will go to deep sleep else it will just wait KEEP_ALIVE_TIME seconds    
+    // If USE_DEEP_SLEEP is true, the system will go to deep sleep else it will just wait KEEP_ALIVE_TIME seconds    
     if (useDeepSleep) {
         logAndPublish("status", "Going to deep sleep",LOG_INFO);
         Serial.flush();
@@ -294,4 +298,5 @@ void loop()
         Serial.println("Going to sleep for " + String(updateTime) + " seconds");
         delay(updateTime*1000);
     }
+    performDelayedRestart(); // Restart if Initiaterestart has been called via MQTT
 }

@@ -114,9 +114,14 @@ void mqttCallback(char *topic, byte *payload, unsigned int len) {
     DEBUG_PRINTLN("]");
 
     // Convert payload to a null-terminated string
-    char message[len + 1];
-    memcpy(message, payload, len);
-    message[len] = '\0';
+    char messageIn[len + 1];
+    memcpy(messageIn, payload, len);
+    messageIn[len] = '\0';
+   
+   // Convert to String for easier manipulation
+    String message = String(messageIn);
+    // Trim whitespace and EOL characters
+    message.trim();
 
     DEBUG_PRINT("Payload: =");
     DEBUG_PRINT(message);
@@ -160,13 +165,15 @@ void mqttCallback(char *topic, byte *payload, unsigned int len) {
                 if (updateTime == 0) {
                     updateTime = DEFAULT_UPDATE_TIME;
                 }
+                saveDeviceParameter("updateTime", String(updateTime).c_str());
+                //mqtt.publish("log", "Update time changed to " + String(updateTime), true);
                 logAndPublish("log", "Update time changed to " + String(updateTime), LOG_INFO);
                 topicHandled = true;
                 break;
             } else if (strcmp(mqttTopics[i], topicUseDeepSleep) == 0) {
                 // *** Topic use Deep Sleep
                 String fullPayload;
-                if (String(message) == "1") {
+                if (message) == "1") {
                     useDeepSleep = true;
                     fullPayload = "useDeepSleep state changed to true ";
                 } else {
@@ -179,10 +186,10 @@ void mqttCallback(char *topic, byte *payload, unsigned int len) {
                 topicHandled = true;
                 break;
             }  else if (strcmp(mqttTopics[i], topicEspRestart) == 0) {
-                // *** Topic use Deep Sleep
+                // *** Topic espRestart
                 espRestart = true;
+                initiateRestart();
                 logAndPublish("log", "Restarting ESP", LOG_INFO);
-                
                 topicHandled = true;
                 break;
             } else {

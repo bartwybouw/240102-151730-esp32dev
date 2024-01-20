@@ -40,7 +40,7 @@ const char* mqttTopics[] = {
     "deviceName",
     "updateTime",
     "useDeepSleep",
-    "espRestart"
+    "espRestart",
 };
 
 const int mqttTopicsCount = sizeof(mqttTopics) / sizeof(mqttTopics[0]);

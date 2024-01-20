@@ -9,6 +9,8 @@
 // ****************************
 void saveDeviceName(const char* deviceName);
 String loadDeviceName();
+void saveDeviceParameter(const char* parameterName, const char* parameterValue);
+String loadDeviceParameter(const char* parameterName);
 float readBatteryVoltage();
 void syncTimeWithNetwork(TinyGsm& modem);
 String getNetworkDateTime(TinyGsm& modem);
@@ -36,7 +38,27 @@ String loadDeviceName() {
     Serial.println("Device name: " + name);
     return name;
 }
-    
+
+// Save device parameter to ESP32 NVS (Non-Volatile Storage)
+void saveDeviceParameter(const char* parameterName, const char* parameterValue) {
+    preferences.begin("general", false); // "general" is the namespace; false for read/write mode
+    preferences.putString(parameterName, parameterValue);
+    logAndPublish("NVS save", String(parameterName) + " = " + String(parameterValue), LOG_INFO);
+    preferences.end();
+}
+
+// Load device Parameter from ESP32 NVS (Non-Volatile Storage)
+String loadDeviceParameter(const char* parameterName) {
+    preferences.begin("general", false); // "general" is the namespace; true for read-only mode
+    if (!preferences.isKey(parameterName)) {
+        String errorMessage = String(parameterName) + " name not found in NVS, setting to default";
+        Serial.println(errorMessage);
+    }
+    String name = preferences.getString(parameterName, ""); // Provide a default name
+    preferences.end();
+    Serial.println(parameterName + name);
+    return name;
+}
 // Battery Calculation
 float readBatteryVoltage() {
     uint16_t v = analogRead(ADC_PIN);
