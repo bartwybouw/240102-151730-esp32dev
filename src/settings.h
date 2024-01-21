@@ -19,8 +19,8 @@ const char gprsUser[] = "";
 const char gprsPass[] = "";
 
 // Your WiFi connection credentials, if applicable
-const char wifiSSID[] = "pixerang-unifi";
-const char wifiPass[] = "blijfuitonsnetwerk";
+const char wifiSSID[] = "";
+const char wifiPass[] = "";
 
 // MQTT details
 const char* mqttBroker     = "178.116.210.112";
@@ -29,8 +29,8 @@ const char* InitDeviceName = "TTGO-T-SIM7070G_XYZ";
 char* deviceName = nullptr;                         // Will be allocated during setup, will contain the name of the system => NEEDS TO BE STORED permanently!!! 
 const char* THISdeviceName = "TTGO-T-SIM7070G_1"; // Only use to force a name during testing, combine with >>#define TEST_NAME<<
 
-const char* mqttUser       = "bartw";
-const char* mqttPassword   = "blijfteruit";
+const char* mqttUser       = "";
+const char* mqttPassword   = "";
 String baseTopic = "IIOT"; //This is a prefix for all topics, so you can share a single MQTT server between several projects
 
 // Array of topic strings which will be used to subscribe to topics
